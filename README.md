@@ -1,6 +1,6 @@
 # Silent Trace
 
-Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 2 adds the typed synthetic data model and ingestion foundation; no real criminal records or personally identifiable information should be used.
+Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 3 adds conservative entity resolution and knowledge-graph construction on top of the Phase 2 ingestion foundation; no real criminal records or personally identifiable information should be used.
 
 ## Architecture overview
 
@@ -9,6 +9,7 @@ The project is a deliberately small local application:
 - **Frontend:** React with Vite, served on `http://localhost:5173`.
 - **Backend:** Python FastAPI, served on `http://localhost:8000`.
 - **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates and ingests a dataset.
+- **Graph API:** `POST /api/graph/resolve`, `POST /api/graph`, `GET /api/graph/{graph_id}`, and the evidence endpoint expose resolution, graph construction, retrieval, and provenance lookup.
 - **Data:** `data/synthetic/demo_dataset.json` contains fictional source records; `data/raw` and `data/processed` remain reserved for later workflows.
 
 The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. SQLite, NetworkX, NLP, graph analytics, anomaly detection, and authentication are intentionally deferred until a later phase.
@@ -20,6 +21,12 @@ The canonical models in `backend/app/schemas/investigation.py` cover persons, ph
 Each dataset contains source records with a `record_id`, `record_type`, `source_record_id`, `observed_at`, and payload. The `IngestionService` validates each payload against its typed model, normalizes basic fields such as phone numbers and vehicle registrations, rejects duplicate or mismatched IDs, and returns a consistent `IngestedRecord`. Every accepted record includes a non-empty `provenance` list containing its source record ID. Errors are returned per record with field-level detail so one invalid record does not obscure other valid records.
 
 The ingestion service is intentionally independent of persistence. A future authorized source adapter can convert its input into `SourceRecord` objects without changing the validation, normalization, or provenance contract.
+
+## Phase 3 entity resolution and knowledge graph
+
+`EntityResolutionService` applies deterministic structured keys after normalization: names and aliases for people, digits for phone numbers, registrations for vehicles, label/locality pairs for locations, and normalized names for organizations. An exact key match consolidates source representations under the first stable entity ID while retaining every source ID and evidence reference. A strong-but-not-exact fuzzy similarity is never silently merged; it produces a `candidate_review` result with confidence and candidate IDs. Different keys remain separate. No criminality, guilt, or risk score is produced.
+
+`KnowledgeGraphService` converts resolved entities into provenance-carrying nodes and communication, transaction, or explicit relationship records into typed observed edges. Edges retain their source record, timestamp, confidence, and evidence reference. The graph schemas are intentionally simple lists of nodes and edges so later analytics can be added without changing the evidence contract. Graphs are currently held in process memory for this prototype; persistence and graph analytics are out of scope for Phase 3.
 
 ## Prerequisites
 
@@ -71,9 +78,9 @@ npm run build
 
 ## Current MVP status
 
-**Phase 2 complete:** typed synthetic investigation data model, fictional demo fixture, modular ingestion service, ingestion API route, validation/normalization, stable IDs, provenance preservation, automated ingestion tests, and documentation.
+**Phase 3 complete:** conservative deterministic entity resolution, reviewable fuzzy candidates, provenance-preserving graph schemas and construction, graph retrieval/evidence APIs, and automated resolution/graph tests. Phase 1 and Phase 2 functionality remains in place.
 
-The following remain explicitly out of scope: NLP/entity extraction, entity resolution, graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
+The following remain explicitly out of scope: NLP/entity extraction, graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
 
 ## Testing
 

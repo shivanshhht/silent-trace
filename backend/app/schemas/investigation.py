@@ -147,7 +147,7 @@ class IngestedRecord(StrictModel):
     record_type: RecordType
     observed_at: datetime
     data: dict
-    provenance: list[str] = Field(min_length=1)
+    provenance: list[str | dict] = Field(min_length=1)
 
 
 class IngestionResult(StrictModel):

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.ingestion import router as ingestion_router
+from app.api.graph import router as graph_router
 
 app = FastAPI(title="Silent Trace API", version="0.1.0")
 
@@ -14,6 +15,7 @@ app.add_middleware(
 )
 
 app.include_router(ingestion_router)
+app.include_router(graph_router)
 
 
 @app.get("/api/health")
