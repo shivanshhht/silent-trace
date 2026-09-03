@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;600;700;800&display=swap');
+
+:root { font-family: Manrope, sans-serif; color: #e6edf7; background: #09111f; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 15% 10%, #173154 0, transparent 42%), #09111f; }
+.shell { min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(2rem, 7vw, 7rem); }
+.hero { max-width: 680px; padding-top: 8vh; }
+.eyebrow { color: #6e9ed5; font: 500 0.72rem 'DM Mono', monospace; letter-spacing: 0.18em; }
+h1 { margin: 1.1rem 0; font-size: clamp(3.5rem, 10vw, 7.5rem); line-height: .95; letter-spacing: -0.08em; }
+h1 span { color: #54d6b4; }
+.intro { max-width: 520px; color: #a7b7cb; font-size: clamp(1rem, 2vw, 1.25rem); line-height: 1.7; }
+.status-card { display: inline-flex; align-items: center; gap: .9rem; margin-top: 2rem; padding: 1rem 1.2rem; border: 1px solid #29405d; border-radius: 12px; background: #101e31cc; backdrop-filter: blur(10px); }
+.status-card strong, .status-card small { display: block; }
+.status-card strong { font-size: .95rem; }
+.status-card small { margin-top: .2rem; color: #8fa4bd; font: .75rem 'DM Mono', monospace; }
+.status-dot { width: .65rem; height: .65rem; border-radius: 50%; background: #f3bd5b; box-shadow: 0 0 14px #f3bd5b; }
+.status-card.connected { border-color: #287c6d; } .status-card.connected .status-dot { background: #54d6b4; box-shadow: 0 0 14px #54d6b4; }
+.status-card.unavailable { border-color: #7d3b4b; } .status-card.unavailable .status-dot { background: #f27889; box-shadow: 0 0 14px #f27889; }
+footer { color: #61758e; font: .7rem 'DM Mono', monospace; letter-spacing: .06em; }
