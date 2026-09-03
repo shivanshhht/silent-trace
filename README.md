@@ -1,6 +1,6 @@
 # Silent Trace
 
-Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 3 adds conservative entity resolution and knowledge-graph construction on top of the Phase 2 ingestion foundation; no real criminal records or personally identifiable information should be used.
+Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 4 adds deterministic NLP extraction from fictional unstructured reports on top of the Phase 1–3 foundation; no real criminal records or personally identifiable information should be used.
 
 ## Architecture overview
 
@@ -10,9 +10,10 @@ The project is a deliberately small local application:
 - **Backend:** Python FastAPI, served on `http://localhost:8000`.
 - **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates and ingests a dataset.
 - **Graph API:** `POST /api/graph/resolve`, `POST /api/graph`, `GET /api/graph/{graph_id}`, and the evidence endpoint expose resolution, graph construction, retrieval, and provenance lookup.
-- **Data:** `data/synthetic/demo_dataset.json` contains fictional source records; `data/raw` and `data/processed` remain reserved for later workflows.
+- **NLP API:** `POST /api/nlp/extract`, `POST /api/nlp/process`, and `POST /api/nlp/extract/batch` process fictional unstructured reports.
+- **Data:** `data/synthetic/demo_dataset.json` and `data/synthetic/reports.json` contain fictional structured and unstructured source records; `data/raw` and `data/processed` remain reserved for later workflows.
 
-The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. SQLite, NetworkX, NLP, graph analytics, anomaly detection, and authentication are intentionally deferred until a later phase.
+The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. The Phase 4 extractor uses Python standard-library patterns rather than a heavyweight NLP dependency. SQLite, graph analytics, anomaly detection, and authentication remain deferred.
 
 ## Phase 2 data model and ingestion flow
 
@@ -27,6 +28,12 @@ The ingestion service is intentionally independent of persistence. A future auth
 `EntityResolutionService` applies deterministic structured keys after normalization: names and aliases for people, digits for phone numbers, registrations for vehicles, label/locality pairs for locations, and normalized names for organizations. An exact key match consolidates source representations under the first stable entity ID while retaining every source ID and evidence reference. A strong-but-not-exact fuzzy similarity is never silently merged; it produces a `candidate_review` result with confidence and candidate IDs. Different keys remain separate. No criminality, guilt, or risk score is produced.
 
 `KnowledgeGraphService` converts resolved entities into provenance-carrying nodes and communication, transaction, or explicit relationship records into typed observed edges. Edges retain their source record, timestamp, confidence, and evidence reference. The graph schemas are intentionally simple lists of nodes and edges so later analytics can be added without changing the evidence contract. Graphs are currently held in process memory for this prototype; persistence and graph analytics are out of scope for Phase 3.
+
+## Phase 4 NLP extraction
+
+`NLPExtractionService` provides a reproducible, lightweight extractor for the controlled synthetic report format. It uses regular expressions and explicit relationship phrases to identify people, phone numbers, vehicles, locations, organizations, date/time values, and incident/event text. It emits normalized values, stable deterministic IDs, confidence values, character spans, source report IDs, and evidence snippets. Relationships are created only for explicit phrases such as “contacted ... using phone,” “drove vehicle,” “met,” and “associated with”; co-occurrence alone does not create an edge.
+
+The extractor adapter converts supported entities and explicit relationships into the existing `IngestedRecord` representation. The `/api/nlp/process` endpoint then runs extraction, entity resolution, and graph construction in sequence, preserving the original report source reference throughout. This is a deterministic NLP demonstration, not a general-purpose language understanding system; unsupported wording may produce no extraction, and all outputs are evidence-bearing observations rather than conclusions about guilt or criminality.
 
 ## Prerequisites
 
@@ -78,9 +85,9 @@ npm run build
 
 ## Current MVP status
 
-**Phase 3 complete:** conservative deterministic entity resolution, reviewable fuzzy candidates, provenance-preserving graph schemas and construction, graph retrieval/evidence APIs, and automated resolution/graph tests. Phase 1 and Phase 2 functionality remains in place.
+**Phase 4 complete:** deterministic synthetic-report NLP extraction, explicit relationship extraction, source spans and evidence snippets, integration with ingestion/entity resolution/graph construction, NLP APIs, synthetic report fixtures, and automated tests. Phase 1–3 functionality remains in place.
 
-The following remain explicitly out of scope: NLP/entity extraction, graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
+The following remain explicitly out of scope: graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
 
 ## Testing
 
