@@ -1,6 +1,6 @@
 # Silent Trace
 
-Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 1 establishes the local full-stack foundation only; no real criminal records or personally identifiable information should be used.
+Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 2 adds the typed synthetic data model and ingestion foundation; no real criminal records or personally identifiable information should be used.
 
 ## Architecture overview
 
@@ -8,10 +8,18 @@ The project is a deliberately small local application:
 
 - **Frontend:** React with Vite, served on `http://localhost:5173`.
 - **Backend:** Python FastAPI, served on `http://localhost:8000`.
-- **API:** `GET /api/health` provides the initial liveness check.
-- **Data:** `data/raw`, `data/processed`, and `data/synthetic` reserve space for later synthetic data workflows.
+- **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates and ingests a dataset.
+- **Data:** `data/synthetic/demo_dataset.json` contains fictional source records; `data/raw` and `data/processed` remain reserved for later workflows.
 
-The backend currently uses only FastAPI, Uvicorn, pytest, and HTTPX. SQLite, NetworkX, NLP, graph analytics, anomaly detection, and authentication are intentionally deferred until a later phase.
+The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. SQLite, NetworkX, NLP, graph analytics, anomaly detection, and authentication are intentionally deferred until a later phase.
+
+## Phase 2 data model and ingestion flow
+
+The canonical models in `backend/app/schemas/investigation.py` cover persons, phone numbers, vehicles, locations, organizations, incidents, communications, financial transactions, evidence/source records, and relationships. Entity IDs use stable typed prefixes such as `per_`, `phn_`, `veh_`, `loc_`, `org_`, and `inc_`. Record IDs use `src_`, `com_`, `txn_`, or `rel_` prefixes. The fictional currency code `SYN` is used in demo transactions so the fixture cannot be mistaken for real financial data.
+
+Each dataset contains source records with a `record_id`, `record_type`, `source_record_id`, `observed_at`, and payload. The `IngestionService` validates each payload against its typed model, normalizes basic fields such as phone numbers and vehicle registrations, rejects duplicate or mismatched IDs, and returns a consistent `IngestedRecord`. Every accepted record includes a non-empty `provenance` list containing its source record ID. Errors are returned per record with field-level detail so one invalid record does not obscure other valid records.
+
+The ingestion service is intentionally independent of persistence. A future authorized source adapter can convert its input into `SourceRecord` objects without changing the validation, normalization, or provenance contract.
 
 ## Prerequisites
 
@@ -63,9 +71,9 @@ npm run build
 
 ## Current MVP status
 
-**Phase 1 complete:** repository foundation, React/Vite frontend, FastAPI backend, CORS configuration, health endpoint, basic backend test, local environment templates, and run documentation.
+**Phase 2 complete:** typed synthetic investigation data model, fictional demo fixture, modular ingestion service, ingestion API route, validation/normalization, stable IDs, provenance preservation, automated ingestion tests, and documentation.
 
-The following are explicitly out of scope for Phase 1: data ingestion, NLP/entity extraction, relationship extraction, identity resolution, graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
+The following remain explicitly out of scope: NLP/entity extraction, entity resolution, graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
 
 ## Testing
 

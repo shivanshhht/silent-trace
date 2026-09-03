@@ -1,0 +1,16 @@
+{
+  "dataset_id": "set_demo-001",
+  "description": "Synthetic Silent Trace demonstration dataset; all names, identifiers, locations, and transactions are fictional.",
+  "records": [
+    {"record_id":"src_demo-001","record_type":"evidence_source","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"record_id":"src_demo-001","source_type":"synthetic_report","title":"Demo incident report","collected_at":"2026-01-10T08:00:00Z","reliability":"high","content":"Fictional report created for software demonstration."}},
+    {"record_id":"per_demo-001","record_type":"person","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"entity_id":"per_demo-001","display_name":"Avery Rowan","aliases":["A. Rowan"]}},
+    {"record_id":"phn_demo-001","record_type":"phone","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"entity_id":"phn_demo-001","number":"+1 (555) 010-2040","label":"demo mobile"}},
+    {"record_id":"veh_demo-001","record_type":"vehicle","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"entity_id":"veh_demo-001","registration":"ST-2040","make_model":"Fictional Orion Sedan","color":"blue"}},
+    {"record_id":"loc_demo-001","record_type":"location","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"entity_id":"loc_demo-001","label":"Demo Market","locality":"Example City"}},
+    {"record_id":"org_demo-001","record_type":"organization","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"entity_id":"org_demo-001","name":"Northstar Demo Cooperative","organization_type":"fictional cooperative"}},
+    {"record_id":"inc_demo-001","record_type":"incident","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"entity_id":"inc_demo-001","incident_type":"demo event","occurred_at":"2026-01-09T18:30:00Z","location_id":"loc_demo-001","summary":"Fictional event for ingestion testing."}},
+    {"record_id":"com_demo-001","record_type":"communication","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"record_id":"com_demo-001","from_entity_id":"per_demo-001","to_entity_id":"phn_demo-001","occurred_at":"2026-01-09T17:00:00Z","channel":"call","duration_seconds":90}},
+    {"record_id":"txn_demo-001","record_type":"financial_transaction","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"record_id":"txn_demo-001","from_entity_id":"per_demo-001","to_entity_id":"org_demo-001","occurred_at":"2026-01-09T16:00:00Z","amount":125.5,"currency":"SYN","reference":"demo reimbursement"}},
+    {"record_id":"rel_demo-001","record_type":"relationship","source_record_id":"src_demo-001","observed_at":"2026-01-10T08:00:00Z","payload":{"record_id":"rel_demo-001","from_entity_id":"per_demo-001","to_entity_id":"phn_demo-001","relationship_type":"uses","source_record_id":"src_demo-001","confidence":1.0}}
+  ]
+}
