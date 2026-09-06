@@ -1,0 +1,297 @@
+.graphcanvas {
+  position: absolute;
+  inset: 0;
+  background-color: var(--graph-bg);
+  /* A faint survey grid. It gives the canvas a sense of place under pan and
+     zoom without drawing attention to itself. */
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+.graphcanvas.is-tracing {
+  cursor: crosshair;
+}
+
+/* The context panel takes its space from the canvas rather than covering it,
+   so nothing an investigator selected ends up hidden behind the panel that
+   describes it. */
+.graphstage:has(.drawer) .graphcanvas,
+.graphstage:has(.drawer) .glegend,
+.graphstage:has(.drawer) .gprompt {
+  right: var(--drawer-w);
+}
+.graphstage:has(.drawer) .glegend {
+  right: auto;
+}
+.graphstage:has(.drawer) .gstatus {
+  right: calc(var(--drawer-w) + 12px);
+}
+.graphstage:has(.drawer) .gprompt {
+  left: calc((100% - var(--drawer-w)) / 2);
+  right: auto;
+}
+
+.graphstage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------- toolbar */
+
+.gtoolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--canvas);
+  flex: none;
+}
+
+.gtoolbar__spacer {
+  flex: 1;
+}
+
+.gtoolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gtoolbar__divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+.gsearch {
+  position: relative;
+  width: 190px;
+}
+.gsearch svg {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.gsearch .input {
+  width: 100%;
+  height: 28px;
+  padding-left: 26px;
+  font-size: 12px;
+}
+
+/* -------------------------------------------------------------- popover */
+
+.popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  min-width: 236px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+.popover--right {
+  right: 0;
+}
+.popover__group + .popover__group {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-faint);
+}
+.popover__title {
+  margin-bottom: 6px;
+}
+.popover__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.togglechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.togglechip:hover {
+  background: var(--surface-hover);
+}
+.togglechip.is-on {
+  border-color: var(--border-strong);
+  background: var(--surface-active);
+  color: var(--text);
+}
+.togglechip__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+.togglechip__dash {
+  width: 11px;
+  height: 2px;
+  border-radius: 1px;
+  flex: none;
+}
+
+.filter-wrap {
+  position: relative;
+}
+
+/* --------------------------------------------------------------- legend */
+
+.glegend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.93);
+  backdrop-filter: saturate(1.1);
+  max-width: 250px;
+}
+.glegend__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.glegend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+.glegend__line {
+  width: 16px;
+  height: 0;
+  border-top-width: 1.6px;
+  border-top-color: var(--text-muted);
+}
+.glegend__toggle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+/* --------------------------------------------------------- graph status */
+
+.gstatus {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.93);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.gstatus strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* the banner shown while the canvas is waiting for a trace endpoint */
+.gprompt {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px;
+  border: 1px solid var(--trace-line);
+  border-radius: var(--r);
+  background: var(--trace-soft);
+  color: #7a3d12;
+  font-size: 11.5px;
+  font-weight: 500;
+  animation: prompt-in var(--t) var(--ease);
+}
+@keyframes prompt-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+.goverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(251, 252, 250, 0.86);
+}
+
+.layoutopt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  background: transparent;
+  text-align: left;
+  transition: background var(--t-fast) var(--ease);
+}
+.layoutopt:hover {
+  background: var(--surface-hover);
+}
+.layoutopt.is-on {
+  background: var(--surface-active);
+  border-color: var(--border);
+}
+.layoutopt__name {
+  font-size: 12px;
+  font-weight: 600;
+}
+.layoutopt__hint {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.glegend--mini {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  width: auto;
+  max-width: none;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.93);
+}

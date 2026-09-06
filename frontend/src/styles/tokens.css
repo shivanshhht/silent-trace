@@ -1,0 +1,111 @@
+/*
+ * Silent Trace design tokens.
+ *
+ * Two rules govern every value here:
+ *   1. The interface is neutral. Chrome, panels, navigation and type are warm
+ *      greys; nothing in the shell competes with the investigation.
+ *   2. The data is coloured. Entity types, relationship contexts and analytical
+ *      states own the palette, and each colour means exactly one thing
+ *      everywhere in the product.
+ */
+
+:root {
+  /* ---- surfaces ---- */
+  --canvas: #f7f8f6;
+  --surface: #ffffff;
+  --surface-sunken: #f2f4f1;
+  --surface-hover: #f4f6f3;
+  --surface-active: #ecefea;
+  --graph-bg: #fbfcfa;
+  --grid: #edf0ed;
+
+  /* ---- lines ---- */
+  --border: #e1e4e1;
+  --border-strong: #cfd4cf;
+  --border-faint: #eceeea;
+
+  /* ---- type ---- */
+  --text: #171918;
+  --text-secondary: #5e6460;
+  --text-muted: #858b87;
+  --text-inverse: #f7f8f6;
+
+  /* ---- interaction: deliberately graphite, never blue ---- */
+  --ink: #232725;
+  --ink-hover: #333835;
+  --focus-ring: rgba(35, 39, 37, 0.28);
+
+  /* ---- the one brand accent: the trace mark ---- */
+  --trace: #a8541a;
+  --trace-soft: #f4ece3;
+  --trace-line: #c9762f;
+
+  /* ---- entity taxonomy (matches backend EntityType exactly) ---- */
+  --e-person: #4a56c4;
+  --e-person-soft: #ecedfa;
+  --e-organization: #2b7355;
+  --e-organization-soft: #e6f2ec;
+  --e-location: #a8710d;
+  --e-location-soft: #f8f0e0;
+  --e-phone: #bf4a45;
+  --e-phone-soft: #fbebea;
+  --e-vehicle: #3f6a71;
+  --e-vehicle-soft: #e8f1f2;
+  --e-incident: #7d4fa8;
+  --e-incident-soft: #f2ecf8;
+
+  /* ---- relationship context taxonomy ---- */
+  --c-communication: #4a56c4;
+  --c-financial: #2b7355;
+  --c-geographic: #a8710d;
+  --c-family: #8a6a3f;
+  --c-community: #5c6b5f;
+  --c-business: #3f6a71;
+  --c-operational: #7d4fa8;
+  --c-unknown: #9aa09b;
+
+  /* ---- analytical states ---- */
+  --priority-high: #b4342e;
+  --priority-high-soft: #fbeae9;
+  --priority-medium: #a8710d;
+  --priority-medium-soft: #f8f0e0;
+  --priority-low: #5c6b5f;
+  --priority-low-soft: #eef1ee;
+  --analyst: #6d5ba6;
+  --analyst-soft: #f0edf8;
+  --ok: #2b7355;
+  --warn: #a8710d;
+  --danger: #b4342e;
+
+  /* ---- geometry ---- */
+  --r-sm: 3px;
+  --r: 5px;
+  --r-lg: 8px;
+
+  /* ---- elevation: thin lines first, shadow only for things that float ---- */
+  --shadow-panel: 0 1px 2px rgba(23, 25, 24, 0.04), 0 16px 40px -24px rgba(23, 25, 24, 0.28);
+  --shadow-pop: 0 1px 2px rgba(23, 25, 24, 0.06), 0 8px 24px -12px rgba(23, 25, 24, 0.22);
+
+  /* ---- motion: functional durations only ---- */
+  --t-fast: 140ms;
+  --t: 180ms;
+  --t-slow: 240ms;
+  --ease: cubic-bezier(0.32, 0.72, 0.28, 1);
+
+  /* ---- type stacks ---- */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Mono', monospace;
+
+  /* ---- layout ---- */
+  --rail-w: 212px;
+  --drawer-w: 408px;
+  --header-h: 56px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t: 0ms;
+    --t-slow: 0ms;
+  }
+}

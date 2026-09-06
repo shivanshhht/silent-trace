@@ -204,7 +204,7 @@ def test_case_a_cannot_retrieve_case_b_graph() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["", "/entities", "/relationships", "/evidence", "/graph"],
+    ["", "/entities", "/relationships", "/evidence", "/documents", "/runs", "/graph"],
 )
 def test_a_nonexistent_case_is_not_found(path: str) -> None:
     response = client.get(f"/api/investigations/case_missing-001{path}")
@@ -218,13 +218,80 @@ def test_an_existing_case_with_no_data_is_empty_not_missing() -> None:
     entities = client.get("/api/investigations/case_empty-001/entities")
     relationships = client.get("/api/investigations/case_empty-001/relationships")
     evidence = client.get("/api/investigations/case_empty-001/evidence")
+    documents = client.get("/api/investigations/case_empty-001/documents")
+    runs = client.get("/api/investigations/case_empty-001/runs")
     graph = client.get("/api/investigations/case_empty-001/graph")
 
     assert entities.status_code == 200 and entities.json()["count"] == 0
     assert relationships.status_code == 200 and relationships.json()["count"] == 0
     assert evidence.status_code == 200 and evidence.json()["count"] == 0
+    assert documents.status_code == 200 and documents.json()["count"] == 0
+    assert runs.status_code == 200 and runs.json()["count"] == 0
     assert graph.status_code == 200
     assert graph.json()["nodes"] == [] and graph.json()["edges"] == []
+
+
+def test_documents_endpoint_resolves_the_document_an_evidence_row_names() -> None:
+    """Evidence names a ``document_id``; this is what makes it followable.
+
+    Without this the provenance chain stops one step short of the source, so the
+    test asserts the join actually closes rather than that the route responds.
+    """
+    _process("case_docs-001", "docs-001")
+
+    documents = client.get("/api/investigations/case_docs-001/documents").json()
+    assert documents["count"] == 1
+    document = documents["documents"][0]
+    assert document["case_id"] == "case_docs-001"
+    assert document["content"], "the stored document keeps the text its spans quote"
+
+    evidence = client.get("/api/investigations/case_docs-001/evidence").json()
+    referenced = {row["document_id"] for row in evidence["evidence"] if row["document_id"]}
+    assert referenced == {document["document_id"]}
+
+    spans = [row for row in evidence["evidence"] if row["character_start"] is not None]
+    assert spans, "an NLP report should yield at least one quoted span"
+    for row in spans:
+        quoted = document["content"][row["character_start"] : row["character_end"]]
+        assert quoted == row["snippet"], "the stored span must still quote the stored document"
+
+
+def test_runs_endpoint_resolves_the_extraction_run_an_evidence_row_names() -> None:
+    _process("case_runs-001", "runs-001")
+
+    runs = client.get("/api/investigations/case_runs-001/runs").json()
+    assert runs["count"] == 1
+    run = runs["runs"][0]
+    assert run["kind"] == "nlp"
+    assert run["status"] == "completed"
+    assert run["completed_at"] is not None
+
+    evidence = client.get("/api/investigations/case_runs-001/evidence").json()
+    named = {
+        row["extraction_run_id"]
+        for row in evidence["evidence"]
+        if row["extraction_run_id"]
+    }
+    assert named == {run["run_id"]}
+
+
+def test_documents_and_runs_stay_within_their_case() -> None:
+    _process("case_iso-a", "iso-a")
+    _process("case_iso-b", "iso-b")
+
+    a_documents = client.get("/api/investigations/case_iso-a/documents").json()
+    b_documents = client.get("/api/investigations/case_iso-b/documents").json()
+    assert all(item["case_id"] == "case_iso-a" for item in a_documents["documents"])
+    assert all(item["case_id"] == "case_iso-b" for item in b_documents["documents"])
+    assert not (
+        {item["document_id"] for item in a_documents["documents"]}
+        & {item["document_id"] for item in b_documents["documents"]}
+    )
+
+    a_runs = client.get("/api/investigations/case_iso-a/runs").json()
+    b_runs = client.get("/api/investigations/case_iso-b/runs").json()
+    assert all(item["case_id"] == "case_iso-a" for item in a_runs["runs"])
+    assert all(item["case_id"] == "case_iso-b" for item in b_runs["runs"])
 
 
 def test_persistence_refuses_a_record_from_another_case(session) -> None:

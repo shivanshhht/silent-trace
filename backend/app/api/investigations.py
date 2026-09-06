@@ -23,14 +23,18 @@ from app.schemas.graph import KnowledgeGraph
 from app.schemas.persistence import (
     CreateInvestigationRequest,
     CreateRelationshipRequest,
+    DocumentListResponse,
     EntityListResponse,
     EvidenceListResponse,
     InvestigationListResponse,
     InvestigationSummary,
+    PersistedDocument,
     PersistedEntity,
     PersistedEvidence,
     PersistedRelationship,
+    PersistedRun,
     RelationshipListResponse,
+    RunListResponse,
 )
 from app.services.identity import mint_edge_id
 from app.services.pipeline import default_graph_id
@@ -236,6 +240,55 @@ def get_evidence(case_id: str, session: SessionDep) -> EvidenceListResponse:
         for row, record_type, assertion_type in RecordRepository(session).list_evidence(case_id)
     ]
     return EvidenceListResponse(case_id=case_id, evidence=evidence, count=len(evidence))
+
+
+@router.get("/{case_id}/documents", response_model=DocumentListResponse)
+def get_documents(case_id: str, session: SessionDep) -> DocumentListResponse:
+    """The source documents this case holds.
+
+    Read-only, and derived from nothing: every field is the stored row. This is
+    what lets a piece of evidence naming a ``document_id`` be followed to the
+    document it came from instead of dead-ending at the identifier.
+    """
+    _require_case(session, case_id)
+    documents = [
+        PersistedDocument(
+            case_id=row.case_id,
+            document_id=row.document_id,
+            source_type=row.source_type,
+            title=row.title,
+            content_hash=row.content_hash,
+            content=row.content,
+            reliability=row.reliability,
+            collected_at=row.collected_at,
+        )
+        for row in DocumentRepository(session).list_for_case(case_id)
+    ]
+    return DocumentListResponse(case_id=case_id, documents=documents, count=len(documents))
+
+
+@router.get("/{case_id}/runs", response_model=RunListResponse)
+def get_runs(case_id: str, session: SessionDep) -> RunListResponse:
+    """The ingestion and extraction runs recorded for this case."""
+    _require_case(session, case_id)
+    runs = [
+        PersistedRun(
+            case_id=row.case_id,
+            run_id=row.run_id,
+            kind=row.kind,
+            status=row.status,
+            document_id=row.document_id,
+            dataset_id=row.dataset_id,
+            graph_id=row.graph_id,
+            accepted_count=row.accepted_count,
+            rejected_count=row.rejected_count,
+            errors=list(row.errors or []),
+            started_at=row.started_at,
+            completed_at=row.completed_at,
+        )
+        for row in RunRepository(session).list_for_case(case_id)
+    ]
+    return RunListResponse(case_id=case_id, runs=runs, count=len(runs))
 
 
 @router.get("/{case_id}/graph", response_model=KnowledgeGraph)

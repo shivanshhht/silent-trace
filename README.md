@@ -11,7 +11,8 @@ The project is a deliberately small local application:
 - **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates, ingests and persists a case-scoped dataset.
 - **Graph API:** `POST /api/graph/resolve`, `POST /api/graph`, `GET /api/graph/{graph_id}`, and the evidence endpoint expose resolution, graph construction, retrieval, and provenance lookup.
 - **NLP API:** `POST /api/nlp/extract`, `POST /api/nlp/process`, and `POST /api/nlp/extract/batch` process fictional unstructured reports.
-- **Investigations API:** `GET`/`POST /api/investigations`, `GET /api/investigations/{case_id}`, and the `entities`, `relationships`, `evidence` and `graph` sub-resources read persisted state.
+- **Investigations API:** `GET`/`POST /api/investigations`, `GET /api/investigations/{case_id}`, and the `entities`, `relationships`, `evidence`, `documents`, `runs` and `graph` sub-resources read persisted state; `POST /api/investigations/{case_id}/relationships` records an analyst's own assertion.
+- **Analytics API:** `GET /api/analytics/{case_id}/...` exposes `centrality`, `communities`, `bridges`, `paths`, `temporal`, `relationship-context`, `anomalies`, `indicators` and `leads`.
 - **Database:** SQLAlchemy over SQLite for local development, designed to run unchanged on PostgreSQL.
 - **Data:** `data/synthetic/demo_dataset.json` and `data/synthetic/reports.json` contain fictional structured and unstructured source records; `data/raw` and `data/processed` remain reserved for later workflows.
 
@@ -118,7 +119,14 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 The health endpoint is available at <http://localhost:8000/api/health>.
 
-## Frontend setup
+## Frontend
+
+The frontend is the investigator's workspace: React with Vite, `cytoscape` for the
+graph, `react-router-dom` for the shell, and no UI framework. It reads the backend
+and only the backend - there is no mock data, no fixture inside the client, and no
+number in the interface that was not fetched from an endpoint.
+
+### Running it
 
 In a second terminal:
 
@@ -128,19 +136,84 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. The interface calls the backend health endpoint and displays either **Backend connected** or **Backend unavailable**.
-
+Open <http://localhost:5173>. Vite proxies `/api` to `http://127.0.0.1:8000`, so the
+application has one origin in development. Point it elsewhere with `VITE_API_TARGET`.
 To create a production build:
 
 ```bash
 npm run build
 ```
 
+### How the workspace is organised
+
+- `src/api/` - the single door to the backend. `client.js` shapes every request and
+  error identically; `endpoints.js` names every route the workspace uses. No
+  component builds a URL.
+- `src/state/InvestigationContext.jsx` - one investigation, held once. The case
+  loads in two waves (`core`: graph, entities, relationships, evidence, documents,
+  runs; `intel`: the Stage C analysis) so the graph is usable before betweenness
+  finishes. It also builds the indexes every surface reads, and holds the shared
+  selection that makes the surfaces respond to one another.
+- `src/lib/domain.js` - the investigation vocabulary. Entity types, relationship
+  types, contexts, assertion states and priorities each get one colour, one glyph
+  and one wording, mirrored from the backend's own `Literal` types.
+- `src/lib/graphStyle.js`, `src/lib/glyphs.js` - the graph's visual language.
+- `src/lib/traceAnalysis.js` - Trace Analysis. It composes the explanations Stage C
+  already produced for the selected object and names the endpoint each came from.
+  It generates no prose and asserts nothing the backend did not.
+- `src/components/` - `shell`, `graph`, `panels`, `timeline`, `common`.
+- `src/pages/` - Overview, Network, Entities, Evidence, Timeline, Analytics, Leads.
+
+### Design rules the interface holds to
+
+**The interface is neutral; the data is coloured.** Chrome, navigation and panels are
+warm greys on an off-white canvas. Colour is reserved for meaning: entity type,
+relationship context, and analytical priority. Colour never carries meaning alone -
+every coloured element is accompanied by a label, a glyph, or both.
+
+**The graph is information cartography.** A node is a small white plate with a
+coloured border, a type glyph and a readable label. Shape distinguishes entity type
+before colour is read at all. Edge colour is the recorded context, edge dash is how
+the claim is held, and line weight is how much evidence supports it. Nothing glows
+and nothing pulses.
+
+**Context appears when it is asked for.** There is no permanent right-hand panel.
+Selecting an entity, a relationship, a piece of evidence or a path opens the panel
+that describes it, and the canvas yields the space rather than being covered.
+
+**Semantics are never softened.** `observed`, `inferred` and `analyst created` are
+visually distinct everywhere they appear, the backend's caveats are rendered
+verbatim, and an analyst assertion is never presented as something a document said.
+
+### The demo flow
+
+1. The workspace opens on the investigation with the most high-priority leads,
+   chosen by reading each case's leads rather than by naming a case.
+2. **Network** draws the persisted graph. Hover previews a neighbourhood; clicking
+   an entity anchors one and opens its inspector.
+3. **Trace Analysis** in the inspector says why the entity is analytically notable,
+   with each factor naming the analysis that produced it.
+4. Selecting a relationship shows what the connection is and why Silent Trace
+   believes it: context, confidence, source records, documents, extraction runs and
+   the supporting evidence.
+5. Opening a piece of evidence renders the quoted span inside its source document
+   and links back to the graph objects it supports.
+6. **Trace path** takes two entities and returns every recorded route up to three
+   hops, drawn hop by hop on the canvas and inspectable per hop.
+7. Dragging the activity axis narrows the graph to a time window.
+8. **Analytics** and **Leads** expose Stage C, each lead keeping the individual
+   signals that produced it.
+9. **Connection** records an analyst's own assertion; it appears on the graph
+   immediately, marked analyst created.
+10. `Ctrl+K` searches the loaded case and opens whatever it finds.
+
 ## How to run the application
 
 1. Start the backend with Uvicorn using the command above.
-2. Start the frontend with Vite in a second terminal.
-3. Visit <http://localhost:5173> and confirm the connected status.
+2. Seed the demo investigations: `python -m app.cli seed-demo` and
+   `python -m app.cli seed-populations`.
+3. Start the frontend with Vite in a second terminal.
+4. Visit <http://localhost:5173>.
 
 ## Current MVP status
 
@@ -148,7 +221,9 @@ npm run build
 
 **Stage B complete:** a relational persistence layer replaces the in-process graph store. An investigation now runs case → source documents → ingestion run → evidence → entity resolution → relationships → knowledge graph → persisted investigation, and reloads intact after the application stops. Case isolation, provenance, spans and observed/inferred semantics all survive storage, and the synthetic demo case can be seeded deterministically. Every Stage A test still passes unchanged.
 
-The following remain explicitly out of scope: graph visualization and analytics, anomaly detection, authentication, the full investigation dashboard, and Neo4j.
+**Frontend complete:** an investigator workspace over the persisted case - a Cytoscape knowledge graph with semantic entity and relationship styling, entity, relationship and evidence inspectors, quoted spans rendered inside their source document, path tracing up to three hops, a time window that narrows the graph, the Stage C analytics and leads with their reasoning intact, analyst-created relationships, and a command palette. Selection is shared across every surface, so choosing something anywhere updates the graph, the timeline, the evidence and the analysis together.
+
+The following remain explicitly out of scope: authentication, multi-user collaboration, and Neo4j.
 
 Known Stage B limitations are recorded in **Limitations** below.
 
@@ -159,14 +234,23 @@ Known Stage B limitations are recorded in **Limitations** below.
 - **Reprojection is whole-case.** Every pipeline run rebuilds the projection for the entire case. That is what keeps the projection honest, and it is inexpensive at demo scale, but it is O(records in case) per run and would need incremental reprojection at a larger size.
 - **Graph snapshots retain every version.** Nothing prunes old snapshots yet.
 - **No concurrency control.** Two simultaneous writes to one case would both reproject; the prototype assumes a single writer.
+- **The timeline plots `occurred_at` only.** `observed_at` is when a record was collected, which is a different quantity; mixing them would let an assertion recorded today drag the axis of a case from March. Relationships with no stated occurrence date are reported as undated rather than given a substitute one, and are not dimmed when a time window is applied, because the case does not know whether they fall inside it.
+- **Time filtering highlights; it does not reproject.** The backend does not model entity state over time, so narrowing to a window recedes the relationships outside it rather than reconstructing the graph as it stood on a date.
+- **The frontend has no automated test suite.** It was verified by driving the running application in a browser through the full demo flow against the live backend; that check is not checked in.
 - **Evidence carries no assertion column.** `assertion_type` belongs to the claim, not to the span, so the evidence API joins it from the owning record rather than duplicating a field Stage A deliberately does not have.
 
 ## Testing
 
-Run the backend test suite from `backend` with the virtual environment active:
+Run the backend test suite from the repository root:
 
 ```bash
 pytest
+```
+
+Build the frontend:
+
+```bash
+cd frontend && npm run build
 ```
 
 ## Ethics and safety

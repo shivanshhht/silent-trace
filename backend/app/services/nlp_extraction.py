@@ -466,7 +466,12 @@ class NLPExtractionService:
                     source_record_id=report.source_record_id,
                     record_id=record_id,
                     provenance_type="observed",
-                    document_id=report.report_id,
+                    # The id of the *document*, which persistence stores under
+                    # the source record id (the report id is kept as its title).
+                    # Naming the report id here would leave every extracted
+                    # claim pointing at a document that does not exist, so the
+                    # provenance chain would stop one step short of the source.
+                    document_id=report.source_record_id,
                     content_hash=extraction.content_hash,
                     source_type="synthetic_report",
                     extraction_run_id=extraction.extraction_run_id,

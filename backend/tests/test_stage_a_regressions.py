@@ -209,7 +209,9 @@ def test_provenance_carries_full_source_identity() -> None:
 
     assert reference.case_id == "case_prov-002"
     assert reference.source_record_id == "src_prov-002"
-    assert reference.document_id == report.report_id
+    # The document id must be the id the document is stored under, so the
+    # reference resolves to a real document rather than to the report label.
+    assert reference.document_id == report.source_record_id
     assert reference.content_hash == extraction.content_hash
     assert reference.extraction_run_id == extraction.extraction_run_id
     assert reference.source_type == "synthetic_report"

@@ -158,3 +158,56 @@ class EvidenceListResponse(StrictModel):
     case_id: str = Field(pattern=CASE_ID_PATTERN)
     evidence: list[PersistedEvidence] = Field(default_factory=list)
     count: int = 0
+
+
+class PersistedDocument(StrictModel):
+    """A source document as stored.
+
+    Evidence rows carry a ``document_id``; without this the frontend can show
+    that a claim came from a document but never which document, so provenance
+    would stop one link short of the source. Nothing here is derived: every
+    field is read back from the row the ingestion pipeline wrote.
+    """
+
+    case_id: str = Field(pattern=CASE_ID_PATTERN)
+    document_id: str
+    source_type: str
+    title: str | None = None
+    content_hash: str | None = None
+    content: str | None = None
+    reliability: str | None = None
+    collected_at: datetime | None = None
+
+
+class DocumentListResponse(StrictModel):
+    case_id: str = Field(pattern=CASE_ID_PATTERN)
+    documents: list[PersistedDocument] = Field(default_factory=list)
+    count: int = 0
+
+
+class PersistedRun(StrictModel):
+    """One ingestion or extraction run.
+
+    Evidence names an ``extraction_run_id``; this is what makes that id
+    resolvable to when the run happened, what it processed and whether it
+    completed.
+    """
+
+    case_id: str = Field(pattern=CASE_ID_PATTERN)
+    run_id: str
+    kind: str
+    status: str
+    document_id: str | None = None
+    dataset_id: str | None = None
+    graph_id: str | None = None
+    accepted_count: int = 0
+    rejected_count: int = 0
+    errors: list[str] = Field(default_factory=list)
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
+class RunListResponse(StrictModel):
+    case_id: str = Field(pattern=CASE_ID_PATTERN)
+    runs: list[PersistedRun] = Field(default_factory=list)
+    count: int = 0
