@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.api.dependencies import graph_store
+from app.db import database
 from app.schemas.investigation import IngestedRecord, ProvenanceRecord
 
 
@@ -12,11 +12,24 @@ DEFAULT_TIME = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def isolated_graph_store():
-    """The graph store is process-wide, so each test starts from an empty one."""
-    graph_store.clear()
+def isolated_database(tmp_path):
+    """Point every test at its own SQLite file.
+
+    A real file rather than an in-memory database, so the tests exercise the
+    same storage path the application uses, and a fresh one per test so no test
+    can pass because of state another test left behind.
+    """
+    database.configure(f"sqlite:///{(tmp_path / 'silent_trace_test.db').as_posix()}")
+    database.create_all()
     yield
-    graph_store.clear()
+    database.dispose()
+
+
+@pytest.fixture
+def session():
+    """A unit of work for tests that exercise repositories or the pipeline directly."""
+    with database.session_scope() as active:
+        yield active
 
 
 @pytest.fixture

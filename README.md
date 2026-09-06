@@ -1,6 +1,6 @@
 # Silent Trace
 
-Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 4 adds deterministic NLP extraction from fictional unstructured reports on top of the Phase 1–3 foundation; no real criminal records or personally identifiable information should be used.
+Silent Trace is an AI-assisted investigation intelligence platform prototype. It is designed to transform **synthetic, demo-only** investigative records into an explainable, time-aware knowledge graph. Phase 4 adds deterministic NLP extraction from fictional unstructured reports on top of the Phase 1–3 foundation; Stage B replaces in-process state with a relational database, so an investigation survives an application restart. No real criminal records or personally identifiable information should be used.
 
 ## Architecture overview
 
@@ -8,12 +8,14 @@ The project is a deliberately small local application:
 
 - **Frontend:** React with Vite, served on `http://localhost:5173`.
 - **Backend:** Python FastAPI, served on `http://localhost:8000`.
-- **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates and ingests a case-scoped dataset.
+- **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates, ingests and persists a case-scoped dataset.
 - **Graph API:** `POST /api/graph/resolve`, `POST /api/graph`, `GET /api/graph/{graph_id}`, and the evidence endpoint expose resolution, graph construction, retrieval, and provenance lookup.
 - **NLP API:** `POST /api/nlp/extract`, `POST /api/nlp/process`, and `POST /api/nlp/extract/batch` process fictional unstructured reports.
+- **Investigations API:** `GET`/`POST /api/investigations`, `GET /api/investigations/{case_id}`, and the `entities`, `relationships`, `evidence` and `graph` sub-resources read persisted state.
+- **Database:** SQLAlchemy over SQLite for local development, designed to run unchanged on PostgreSQL.
 - **Data:** `data/synthetic/demo_dataset.json` and `data/synthetic/reports.json` contain fictional structured and unstructured source records; `data/raw` and `data/processed` remain reserved for later workflows.
 
-Every record, entity, edge, graph and provenance reference is scoped to a `case_id` matching `case_[a-z0-9-]+`. The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. The Phase 4 extractor uses Python standard-library patterns rather than a heavyweight NLP dependency. SQLite, graph analytics, anomaly detection, and authentication remain deferred.
+Every record, entity, edge, graph and provenance reference is scoped to a `case_id` matching `case_[a-z0-9-]+`. The backend uses FastAPI, Uvicorn, Pydantic, SQLAlchemy, pytest, and HTTPX. The Phase 4 extractor uses Python standard-library patterns rather than a heavyweight NLP dependency. Graph analytics, anomaly detection, and authentication remain deferred, as do Neo4j and any other infrastructure.
 
 ## Data model, case scoping and identity
 
@@ -41,7 +43,46 @@ Two orthogonal semantics are modelled. `assertion_type` records the status of a 
 
 `KnowledgeGraphService` converts resolved entities into provenance-carrying nodes that retain their `match_status`, `match_confidence` and `review_candidates`, so an uncertain identity stays distinguishable from a confident one. Edge identity is `(case_id, from, to, relationship_type)`: several records asserting the same relationship pool their evidence onto one edge instead of producing duplicate IDs, and evidence lookup returns every supporting record.
 
-Construction is total and explainable. An edge is only created when both endpoints resolve to nodes present in the graph; a relationship whose endpoint cannot be resolved appears in `rejected_edges` with a reason rather than becoming a dangling edge. Graphs are held in process memory for this prototype; persistence and graph analytics remain out of scope.
+Construction is total and explainable. An edge is only created when both endpoints resolve to nodes present in the graph; a relationship whose endpoint cannot be resolved appears in `rejected_edges` with a reason rather than becoming a dangling edge. Graphs are persisted as versioned snapshots (see **Persistence** below); graph analytics remain out of scope.
+
+## Persistence
+
+Stage B removes the in-process `GraphStore` and replaces it with a relational persistence layer under `backend/app/db/`: `database.py` (engine and session lifecycle), `models.py` (schema) and `repositories.py` (case-scoped data access).
+
+**Records are authoritative; everything else is a projection.** The graph is already a deterministic function of the validated record set, so storing the projection as if it were independent truth would let the two drift. `backend/app/services/pipeline.py` persists records and provenance, then rebuilds entities, relationships and the graph snapshot from the full case record set. This is why a person named in a second report merges with the same person from the first, and why an edge whose endpoint only becomes resolvable later does become an edge.
+
+**There is one write path.** Structured ingestion, NLP processing and direct graph construction differ only in how they produce canonical records; once records exist they all take the identical route through `InvestigationPipeline._persist_and_project`. There is no second way into a case.
+
+**Case isolation is structural.** Every table carrying case data has `case_id` in its primary key and a foreign key back to `investigation_cases`, so a row cannot exist without a case and the identifier `src_demo-001` in two investigations is two genuinely distinct rows. Every repository method is keyed by case. The single deliberate exception is `GraphRepository.case_of_graph`, which exists so the pipeline can *detect* an attempt to reuse one graph id across two cases and refuse it.
+
+Provenance is stored once and referenced from both entities and relationships, so evidence cannot disagree with itself depending on which way it is queried. Assertion semantics are unchanged by storage: structured entities reload as `observed`, NLP entities as `inferred`, and an inferred claim still carries `observed` provenance for the span that backs it.
+
+Graph snapshots are versioned. Each pipeline run appends a version and marks it current, so how the graph of an investigation evolved stays inspectable rather than being overwritten.
+
+## Database
+
+Local development uses SQLite through SQLAlchemy; the schema is written to run unchanged on PostgreSQL, which is the intended production database. `JSON` columns are declared with a `JSONB` variant so PostgreSQL gets the indexable type, timestamps are normalized to UTC at the repository boundary because SQLite discards offsets and PostgreSQL does not, and SQLite foreign keys are explicitly enabled so a constraint is not weaker in development than in production.
+
+The database is selected by `SILENT_TRACE_DATABASE_URL` and defaults to `backend/silent_trace.db`. Pointing at PostgreSQL is a configuration change rather than a code change:
+
+```bash
+export SILENT_TRACE_DATABASE_URL="postgresql+psycopg://user:password@localhost/silent_trace"
+```
+
+Neo4j, Redis, Elasticsearch and Kafka are deliberately not introduced.
+
+### Initializing and seeding the local database
+
+From `backend`, with the virtual environment active:
+
+```bash
+python -m app.cli init-db      # create any missing tables
+python -m app.cli seed-demo    # load the synthetic demo investigation
+python -m app.cli status       # show what is persisted
+python -m app.cli reset --yes  # drop and recreate the schema
+```
+
+`seed-demo` loads `data/synthetic/demo_dataset.json` and `data/synthetic/reports.json` through the same pipeline a live request uses. Nothing is generated randomly, and every identifier is derived from content, so seeding twice produces the same case rather than duplicating it. The API also creates missing tables on startup, so `uvicorn` works without an explicit `init-db`.
 
 ## NLP extraction
 
@@ -105,7 +146,20 @@ npm run build
 
 **Stage A complete:** case scoping enforced end to end, canonical identity minting, a single validation boundary shared by structured and NLP records, structured provenance with preserved spans, explicit observed/inferred/unknown semantics, sentence-scoped relationship attribution, graph referential integrity, and a shared graph store so `POST /api/nlp/process` produces a graph retrievable through the graph API. Phases 1–4 functionality remains in place.
 
-The following remain explicitly out of scope: graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
+**Stage B complete:** a relational persistence layer replaces the in-process graph store. An investigation now runs case → source documents → ingestion run → evidence → entity resolution → relationships → knowledge graph → persisted investigation, and reloads intact after the application stops. Case isolation, provenance, spans and observed/inferred semantics all survive storage, and the synthetic demo case can be seeded deterministically. Every Stage A test still passes unchanged.
+
+The following remain explicitly out of scope: graph visualization and analytics, anomaly detection, authentication, the full investigation dashboard, and Neo4j.
+
+Known Stage B limitations are recorded in **Limitations** below.
+
+## Limitations
+
+- **No migrations.** The schema is created with `create_all`, which is appropriate for a prototype and for SQLite but is not a substitute for versioned migrations. A PostgreSQL deployment should adopt Alembic before the schema changes again.
+- **PostgreSQL is designed for, not yet exercised.** The schema, types and queries are written to be portable and use no SQLite-specific behaviour, but the test suite runs against SQLite only; no PostgreSQL server was available in this environment.
+- **Reprojection is whole-case.** Every pipeline run rebuilds the projection for the entire case. That is what keeps the projection honest, and it is inexpensive at demo scale, but it is O(records in case) per run and would need incremental reprojection at a larger size.
+- **Graph snapshots retain every version.** Nothing prunes old snapshots yet.
+- **No concurrency control.** Two simultaneous writes to one case would both reproject; the prototype assumes a single writer.
+- **Evidence carries no assertion column.** `assertion_type` belongs to the claim, not to the span, so the evidence API joins it from the owning record rather than duplicating a field Stage A deliberately does not have.
 
 ## Testing
 

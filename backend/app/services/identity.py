@@ -96,3 +96,21 @@ def mint_extraction_run_id(case_id: str, document_id: str, text_hash: str) -> st
     testable and diffable.
     """
     return f"run_{_digest(case_id, document_id, text_hash)}"
+
+
+def mint_provenance_id(
+    case_id: str,
+    record_id: str,
+    source_record_id: str,
+    character_start: int | None,
+    character_end: int | None,
+    snippet: str | None,
+    extraction_run_id: str | None,
+) -> str:
+    """Mint a deterministic id for one piece of provenance.
+
+    Derived from the evidence itself rather than from a counter, so persisting
+    the same evidence twice updates one row instead of accumulating duplicates,
+    and two identical spans in two cases stay distinct.
+    """
+    return f"prv_{_digest(case_id, record_id, source_record_id, str(character_start), str(character_end), snippet or '', extraction_run_id or '')}"

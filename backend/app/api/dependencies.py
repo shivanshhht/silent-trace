@@ -1,24 +1,36 @@
-"""Shared service instances.
+"""Shared service instances and the request-scoped database session.
 
-The ingestion, graph and NLP routers must operate on the same resolver and the
-same graph store. Instantiating services per-router previously meant the NLP
-pipeline built graphs into an object the graph API could not see.
+The services are stateless: all investigation state now lives in the database,
+so a single instance per process is correct and there is no in-memory store for
+routers to disagree about. What every router must share instead is the *one*
+pipeline, so that structured ingestion, NLP processing and direct graph
+construction cannot diverge into separate write paths.
 """
 
-from app.services.entity_resolution import EntityResolutionService
-from app.services.graph_store import GraphStore
-from app.services.ingestion import IngestionService
-from app.services.knowledge_graph import KnowledgeGraphService
-from app.services.nlp_extraction import NLPExtractionService
+from typing import Annotated
 
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
-resolver = EntityResolutionService()
-graph_service = KnowledgeGraphService(resolver)
-graph_store = GraphStore()
-ingestion_service = IngestionService()
-extractor = NLPExtractionService()
+from app.db.database import get_session
+from app.services.pipeline import InvestigationPipeline, default_graph_id
 
+pipeline = InvestigationPipeline()
 
-def default_graph_id(case_id: str) -> str:
-    """One graph per investigation by default, so reports accumulate per case."""
-    return f"graph_{case_id.removeprefix('case_')}"
+# Retained for routers and tests that address a single stage directly.
+resolver = pipeline.resolver
+graph_service = pipeline.graph_service
+extractor = pipeline.extractor
+ingestion_service = pipeline.ingestion_service
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+__all__ = [
+    "SessionDep",
+    "default_graph_id",
+    "extractor",
+    "graph_service",
+    "ingestion_service",
+    "pipeline",
+    "resolver",
+]

@@ -32,3 +32,8 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+
+# Local SQLite development database
+*.db
+*.db-journal
+*.sqlite3
