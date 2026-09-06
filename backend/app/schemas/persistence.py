@@ -18,6 +18,7 @@ from app.schemas.investigation import (
     AssertionType,
     EntityType,
     ProvenanceType,
+    RelationshipContext,
     RelationshipType,
     StrictModel,
 )
@@ -75,6 +76,32 @@ class EntityListResponse(StrictModel):
     count: int = 0
 
 
+class CreateRelationshipRequest(StrictModel):
+    """An analyst asserting a link between two entities already in the case.
+
+    Both endpoints are canonical entity ids, the same ids the entities endpoint
+    returns. The relationship type must come from the existing canonical
+    vocabulary - an analyst may assert a link, but not invent a new kind of link,
+    because a vocabulary the graph does not understand would be unanalysable.
+
+    No document reference is accepted here by design. There is no document, and
+    offering a field for one would invite a fabricated citation.
+    """
+
+    from_entity_id: str = Field(min_length=1, max_length=128)
+    to_entity_id: str = Field(min_length=1, max_length=128)
+    relationship_type: RelationshipType
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    context: RelationshipContext | None = None
+    analyst_id: str | None = Field(default=None, max_length=120)
+    note: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="the reason the analyst is asserting this link",
+    )
+    occurred_at: datetime | None = None
+
+
 class PersistedRelationship(StrictModel):
     case_id: str = Field(pattern=CASE_ID_PATTERN)
     relationship_id: str
@@ -87,6 +114,13 @@ class PersistedRelationship(StrictModel):
     observed_at: datetime | None = None
     occurred_at: datetime | None = None
     evidence_count: int = 0
+    analyst_created: bool = Field(
+        default=False,
+        description=(
+            "true when at least one piece of evidence on this relationship is an "
+            "analyst assertion rather than a source document"
+        ),
+    )
 
 
 class RelationshipListResponse(StrictModel):

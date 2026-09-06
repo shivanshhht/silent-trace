@@ -9,7 +9,7 @@ different answers and a caller must be able to tell them apart.
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import SessionDep
+from app.api.dependencies import SessionDep, pipeline
 from app.db.models import InvestigationCase
 from app.db.repositories import (
     CaseRepository,
@@ -22,6 +22,7 @@ from app.db.repositories import (
 from app.schemas.graph import KnowledgeGraph
 from app.schemas.persistence import (
     CreateInvestigationRequest,
+    CreateRelationshipRequest,
     EntityListResponse,
     EvidenceListResponse,
     InvestigationListResponse,
@@ -31,6 +32,7 @@ from app.schemas.persistence import (
     PersistedRelationship,
     RelationshipListResponse,
 )
+from app.services.identity import mint_edge_id
 from app.services.pipeline import default_graph_id
 
 router = APIRouter(prefix="/api/investigations", tags=["investigations"])
@@ -112,30 +114,101 @@ def get_entities(case_id: str, session: SessionDep) -> EntityListResponse:
     return EntityListResponse(case_id=case_id, entities=entities, count=len(entities))
 
 
+def _analyst_provenance_ids(session, case_id: str) -> set[str]:
+    """Provenance rows that record an analyst assertion rather than a document."""
+    return {
+        row.provenance_id
+        for row, _, _ in RecordRepository(session).list_evidence(case_id)
+        if row.source_type == "analyst_assertion"
+    }
+
+
+def _persisted_relationship(
+    session, case_id: str, row, analyst_ids: set[str]
+) -> PersistedRelationship:
+    evidence_ids = ProjectionRepository(session).provenance_ids_for_relationship(
+        case_id, row.relationship_id
+    )
+    return PersistedRelationship(
+        case_id=row.case_id,
+        relationship_id=row.relationship_id,
+        from_entity_id=row.from_entity_id,
+        to_entity_id=row.to_entity_id,
+        relationship_type=row.relationship_type,
+        assertion_type=row.assertion_type,
+        confidence=row.confidence,
+        source_record_ids=row.source_record_ids,
+        observed_at=row.observed_at,
+        occurred_at=row.occurred_at,
+        evidence_count=len(evidence_ids),
+        analyst_created=bool(set(evidence_ids) & analyst_ids),
+    )
+
+
 @router.get("/{case_id}/relationships", response_model=RelationshipListResponse)
 def get_relationships(case_id: str, session: SessionDep) -> RelationshipListResponse:
     _require_case(session, case_id)
-    projection = ProjectionRepository(session)
+    analyst_ids = _analyst_provenance_ids(session, case_id)
     relationships = [
-        PersistedRelationship(
-            case_id=row.case_id,
-            relationship_id=row.relationship_id,
-            from_entity_id=row.from_entity_id,
-            to_entity_id=row.to_entity_id,
-            relationship_type=row.relationship_type,
-            assertion_type=row.assertion_type,
-            confidence=row.confidence,
-            source_record_ids=row.source_record_ids,
-            observed_at=row.observed_at,
-            occurred_at=row.occurred_at,
-            evidence_count=len(
-                projection.provenance_ids_for_relationship(case_id, row.relationship_id)
-            ),
-        )
-        for row in projection.list_relationships(case_id)
+        _persisted_relationship(session, case_id, row, analyst_ids)
+        for row in ProjectionRepository(session).list_relationships(case_id)
     ]
     return RelationshipListResponse(
         case_id=case_id, relationships=relationships, count=len(relationships)
+    )
+
+
+@router.post(
+    "/{case_id}/relationships", response_model=PersistedRelationship, status_code=201
+)
+def create_analyst_relationship(
+    case_id: str, request: CreateRelationshipRequest, session: SessionDep
+) -> PersistedRelationship:
+    """Record a link a human analyst asserts between two entities in this case.
+
+    The assertion goes through the same pipeline as every other write, so it is
+    resolved, projected and evidenced identically. It is stored as an
+    ``inferred`` claim whose provenance names the assertion itself rather than
+    any document, because no document exists.
+
+    If a source already asserts the same link, Stage A edge identity pools both
+    onto one edge and keeps the weakest assertion, so an analyst opinion adds
+    evidence without ever promoting a relationship to observed.
+    """
+    _require_case(session, case_id)
+    try:
+        pipeline.create_analyst_relationship(
+            session,
+            case_id,
+            from_entity_id=request.from_entity_id,
+            to_entity_id=request.to_entity_id,
+            relationship_type=request.relationship_type,
+            confidence=request.confidence,
+            context=request.context,
+            analyst_id=request.analyst_id,
+            note=request.note,
+            occurred_at=request.occurred_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    edge_id = mint_edge_id(
+        case_id, request.relationship_type, request.from_entity_id, request.to_entity_id
+    )
+    row = next(
+        (
+            candidate
+            for candidate in ProjectionRepository(session).list_relationships(case_id)
+            if candidate.relationship_id == edge_id
+        ),
+        None,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=500, detail="the asserted relationship did not reach the graph"
+        )
+    return _persisted_relationship(
+        session, case_id, row, _analyst_provenance_ids(session, case_id)
     )
 
 

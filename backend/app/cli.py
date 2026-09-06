@@ -16,6 +16,8 @@ from app.config import database_url
 from app.db.database import create_all, drop_all, session_scope
 from app.db.repositories import CaseRepository, ProjectionRepository, RecordRepository
 from app.services.demo_seed import seed_demo_case
+from app.services.pipeline import InvestigationPipeline
+from app.services.synthetic_populations import all_populations
 
 
 def cmd_init_db(_: argparse.Namespace) -> int:
@@ -35,6 +37,23 @@ def cmd_seed_demo(_: argparse.Namespace) -> int:
     print(f"  graph            {summary.graph_id}: {summary.node_count} nodes, {summary.edge_count} edges")
     for error in summary.errors:
         print(f"  ! {error}")
+    return 0
+
+
+def cmd_seed_populations(_: argparse.Namespace) -> int:
+    """Load the three analytical test populations through the normal pipeline."""
+    create_all()
+    pipeline = InvestigationPipeline()
+    with session_scope() as session:
+        for dataset in all_populations():
+            result = pipeline.ingest_dataset(session, dataset)
+            print(
+                f"seeded {dataset.case_id}: {result.accepted_count} records "
+                f"({result.rejected_count} rejected)"
+            )
+            for error in result.errors:
+                print(f"  ! {error}")
+    print(f"populations loaded into {database_url()}")
     return 0
 
 
@@ -77,6 +96,9 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("seed-demo", help="load the synthetic demo case").set_defaults(
         handler=cmd_seed_demo
     )
+    subparsers.add_parser(
+        "seed-populations", help="load the three synthetic analytical populations"
+    ).set_defaults(handler=cmd_seed_populations)
     subparsers.add_parser("status", help="show persisted investigations").set_defaults(
         handler=cmd_status
     )

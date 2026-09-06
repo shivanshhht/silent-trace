@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.analytics import router as analytics_router
 from app.api.graph import router as graph_router
 from app.api.ingestion import router as ingestion_router
 from app.api.investigations import router as investigations_router
@@ -36,6 +37,7 @@ app.include_router(ingestion_router)
 app.include_router(graph_router)
 app.include_router(nlp_router)
 app.include_router(investigations_router)
+app.include_router(analytics_router)
 
 
 @app.get("/api/health")

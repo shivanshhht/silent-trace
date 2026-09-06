@@ -114,3 +114,25 @@ def mint_provenance_id(
     and two identical spans in two cases stay distinct.
     """
     return f"prv_{_digest(case_id, record_id, source_record_id, str(character_start), str(character_end), snippet or '', extraction_run_id or '')}"
+
+
+def mint_analyst_source_id(
+    case_id: str,
+    relationship_type: str,
+    source_entity_id: str,
+    target_entity_id: str,
+    analyst_id: str | None,
+) -> str:
+    """Mint the source identifier for an analyst assertion.
+
+    An analyst-created relationship has no document behind it, so the thing that
+    stands as its source is the assertion itself. This mints an id for that act
+    rather than borrowing a document id, which is what keeps the provenance
+    honest: nothing downstream can mistake it for a record that was read out of
+    a report.
+
+    Deterministic in the assertion, so the same analyst asserting the same link
+    twice updates one record instead of accumulating duplicates, while two
+    different analysts asserting it produce two separate pieces of evidence.
+    """
+    return f"src_analyst-{_digest(case_id, relationship_type, source_entity_id, target_entity_id, analyst_id or '')}"

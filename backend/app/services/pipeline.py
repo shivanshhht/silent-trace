@@ -37,12 +37,18 @@ from app.schemas.graph import KnowledgeGraph
 from app.schemas.investigation import (
     IngestedRecord,
     IngestionResult,
+    ProvenanceRecord,
     SyntheticDataset,
 )
 from app.schemas.nlp import ReportPipelineResult, ReportRequest
 from app.services.entity_resolution import EntityResolutionService
-from app.services.identity import content_hash
-from app.services.ingestion import IngestionService
+from app.services.identity import (
+    content_hash,
+    mint_analyst_source_id,
+    mint_edge_id,
+    mint_relationship_id,
+)
+from app.services.ingestion import IngestionService, validate_and_normalize
 from app.services.knowledge_graph import KnowledgeGraphService
 from app.services.nlp_extraction import NLPExtractionService
 
@@ -311,6 +317,134 @@ class InvestigationPipeline:
         )
         session.commit()
         return graph
+
+    def create_analyst_relationship(
+        self,
+        session,
+        case_id: str,
+        *,
+        from_entity_id: str,
+        to_entity_id: str,
+        relationship_type: str,
+        confidence: float = 1.0,
+        context: str | None = None,
+        analyst_id: str | None = None,
+        note: str | None = None,
+        occurred_at: datetime | None = None,
+    ) -> tuple[KnowledgeGraph, str]:
+        """Record a relationship asserted by a human analyst.
+
+        This takes the same route as every other write: the payload passes the
+        canonical validation boundary, becomes an ``IngestedRecord``, and goes
+        through ``_persist_and_project``. There is no analyst-only shortcut into
+        the graph, so an asserted link is resolved, projected and evidenced by
+        exactly the same code as one read out of a document.
+
+        **Provenance is not fabricated.** No document id, no content hash and no
+        character span is invented, because none exists. The provenance points at
+        the assertion itself, carries ``source_type='analyst_assertion'``, and is
+        typed ``unknown`` - meaning supporting source evidence has not been
+        established in this system. The analyst may have good reasons; the
+        database simply does not hold them, and it must not imply otherwise.
+
+        **Semantics are preserved.** The record is ``inferred``: no source
+        observed it. If it duplicates a relationship a document already asserts,
+        Stage A edge identity pools both onto one edge and the weakest assertion
+        wins, so adding an analyst opinion can never upgrade a link to observed.
+
+        Returns the rebuilt graph and the id of the edge the assertion landed on.
+        """
+        entities = {
+            row.canonical_id: row for row in ProjectionRepository(session).list_entities(case_id)
+        }
+        missing = [
+            entity_id
+            for entity_id in (from_entity_id, to_entity_id)
+            if entity_id not in entities
+        ]
+        if missing:
+            raise ValueError(
+                f"entities {sorted(missing)} are not part of investigation '{case_id}'; "
+                "an analyst relationship cannot span investigations or reference an "
+                "entity this case has never recorded"
+            )
+        if from_entity_id == to_entity_id:
+            raise ValueError("an analyst relationship must join two different entities")
+
+        # Graph endpoints are matched on the *source* identifiers a record used,
+        # so the canonical id the analyst selected is translated back to one of
+        # the source ids that resolved into it. Picking the lowest keeps the
+        # minted record id deterministic.
+        source_endpoint = sorted(entities[from_entity_id].source_entity_ids)[0]
+        target_endpoint = sorted(entities[to_entity_id].source_entity_ids)[0]
+
+        assertion_source_id = mint_analyst_source_id(
+            case_id, relationship_type, from_entity_id, to_entity_id, analyst_id
+        )
+        record_id = mint_relationship_id(
+            case_id, relationship_type, source_endpoint, target_endpoint, assertion_source_id
+        )
+        recorded_at = datetime.now(timezone.utc)
+
+        payload = {
+            "record_id": record_id,
+            "from_entity_id": source_endpoint,
+            "to_entity_id": target_endpoint,
+            "relationship_type": relationship_type,
+            "source_record_id": assertion_source_id,
+            "confidence": confidence,
+            "occurred_at": occurred_at.isoformat() if occurred_at else None,
+            "analyst_created": True,
+            "analyst_id": analyst_id,
+            "analyst_note": note,
+        }
+        if context is not None:
+            payload["context"] = context
+
+        # The one validation boundary, same as structured and NLP records.
+        normalized = validate_and_normalize("relationship", payload)
+
+        record = IngestedRecord(
+            case_id=case_id,
+            record_id=record_id,
+            record_type="relationship",
+            observed_at=recorded_at,
+            data=normalized,
+            assertion_type="inferred",
+            provenance=[
+                ProvenanceRecord(
+                    case_id=case_id,
+                    source_record_id=assertion_source_id,
+                    record_id=record_id,
+                    provenance_type="unknown",
+                    document_id=None,
+                    content_hash=None,
+                    source_type="analyst_assertion",
+                    observed_at=recorded_at,
+                )
+            ],
+        )
+
+        graph_id = default_graph_id(case_id)
+        self._reject_foreign_graph(session, graph_id, case_id)
+
+        run_id = _run_id(case_id, record_id, "analyst")
+        run = RunRepository(session).start(case_id, run_id, "analyst", graph_id=graph_id)
+
+        graph = self._persist_and_project(
+            session,
+            case_id=case_id,
+            graph_id=graph_id,
+            new_records=[record],
+            run_id=run_id,
+        )
+
+        RunRepository(session).complete(
+            run, status="completed", accepted_count=1, rejected_count=0, errors=[]
+        )
+        session.commit()
+
+        return graph, mint_edge_id(case_id, relationship_type, from_entity_id, to_entity_id)
 
     # ------------------------------------------------------------------
     # Reads

@@ -79,6 +79,24 @@ RECORD_TYPE_RELATIONSHIP: dict[str, str] = {
     "financial_transaction": "transacted_with",
 }
 
+# The social/operational setting a relationship sits in. This is deliberately
+# *stated by the source*, never guessed from personal attributes: inferring that
+# two people are family because they share a surname would be exactly the kind
+# of sensitive inference this system must not make. When a source does not state
+# a context, analysis derives a structural one (communication, financial,
+# geographic) from the relationship type instead, and otherwise reports
+# ``unknown``.
+RelationshipContext = Literal[
+    "family",
+    "community",
+    "business",
+    "communication",
+    "financial",
+    "geographic",
+    "operational",
+    "unknown",
+]
+
 
 def weakest_assertion(values: list[str]) -> str:
     """Combine assertion types conservatively: the weakest contributor wins."""
@@ -233,6 +251,18 @@ class Relationship(StrictModel):
     source_record_id: str = Field(pattern=r"^(src|com|txn|inc)_[a-z0-9-]+$")
     confidence: float = Field(ge=0, le=1)
     occurred_at: datetime | None = None
+    # Optional, and only ever populated when the source document states the
+    # setting outright. Absent means unstated, not "none" - analysis must not
+    # read a missing context as evidence of anything.
+    context: RelationshipContext | None = None
+    # True when a human analyst asserted this link rather than a document
+    # stating it. Such a relationship is always an ``inferred`` assertion: no
+    # source observed it, and the judgement belongs to the analyst. The flag is
+    # kept distinct from ``assertion_type`` because "who claimed this" and "how
+    # strongly it is held" are different questions.
+    analyst_created: bool = False
+    analyst_id: str | None = Field(default=None, max_length=120)
+    analyst_note: str | None = Field(default=None, max_length=1000)
 
 
 class SourceRecord(StrictModel):
