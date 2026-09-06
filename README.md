@@ -8,32 +8,50 @@ The project is a deliberately small local application:
 
 - **Frontend:** React with Vite, served on `http://localhost:5173`.
 - **Backend:** Python FastAPI, served on `http://localhost:8000`.
-- **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates and ingests a dataset.
+- **API:** `GET /api/health` provides liveness; `POST /api/ingestion` validates and ingests a case-scoped dataset.
 - **Graph API:** `POST /api/graph/resolve`, `POST /api/graph`, `GET /api/graph/{graph_id}`, and the evidence endpoint expose resolution, graph construction, retrieval, and provenance lookup.
 - **NLP API:** `POST /api/nlp/extract`, `POST /api/nlp/process`, and `POST /api/nlp/extract/batch` process fictional unstructured reports.
 - **Data:** `data/synthetic/demo_dataset.json` and `data/synthetic/reports.json` contain fictional structured and unstructured source records; `data/raw` and `data/processed` remain reserved for later workflows.
 
-The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. The Phase 4 extractor uses Python standard-library patterns rather than a heavyweight NLP dependency. SQLite, graph analytics, anomaly detection, and authentication remain deferred.
+Every record, entity, edge, graph and provenance reference is scoped to a `case_id` matching `case_[a-z0-9-]+`. The backend currently uses only FastAPI, Uvicorn, Pydantic, pytest, and HTTPX. The Phase 4 extractor uses Python standard-library patterns rather than a heavyweight NLP dependency. SQLite, graph analytics, anomaly detection, and authentication remain deferred.
 
-## Phase 2 data model and ingestion flow
+## Data model, case scoping and identity
 
 The canonical models in `backend/app/schemas/investigation.py` cover persons, phone numbers, vehicles, locations, organizations, incidents, communications, financial transactions, evidence/source records, and relationships. Entity IDs use stable typed prefixes such as `per_`, `phn_`, `veh_`, `loc_`, `org_`, and `inc_`. Record IDs use `src_`, `com_`, `txn_`, or `rel_` prefixes. The fictional currency code `SYN` is used in demo transactions so the fixture cannot be mistaken for real financial data.
 
-Each dataset contains source records with a `record_id`, `record_type`, `source_record_id`, `observed_at`, and payload. The `IngestionService` validates each payload against its typed model, normalizes basic fields such as phone numbers and vehicle registrations, rejects duplicate or mismatched IDs, and returns a consistent `IngestedRecord`. Every accepted record includes a non-empty `provenance` list containing its source record ID. Errors are returned per record with field-level detail so one invalid record does not obscure other valid records.
+Every record carries a `case_id`. `backend/app/services/identity.py` mints canonical identifiers deterministically from `(case_id, entity_type, normalized_value)`, so an entity is stable within an investigation regardless of record order, and the same description in two investigations produces two distinct identifiers. Nothing can merge across a case boundary: entity resolution, graph construction and provenance all reject records belonging to another case.
 
-The ingestion service is intentionally independent of persistence. A future authorized source adapter can convert its input into `SourceRecord` objects without changing the validation, normalization, or provenance contract.
+Optional attributes the source does not state are stored as `None`. The pipeline never invents a placeholder value to satisfy a required field.
 
-## Phase 3 entity resolution and knowledge graph
+## One validation boundary
 
-`EntityResolutionService` applies deterministic structured keys after normalization: names and aliases for people, digits for phone numbers, registrations for vehicles, label/locality pairs for locations, and normalized names for organizations. An exact key match consolidates source representations under the first stable entity ID while retaining every source ID and evidence reference. A strong-but-not-exact fuzzy similarity is never silently merged; it produces a `candidate_review` result with confidence and candidate IDs. Different keys remain separate. No criminality, guilt, or risk score is produced.
+`validate_and_normalize` in `backend/app/services/ingestion.py` is the only validation boundary. Structured ingestion and NLP-derived records both pass through it before reaching entity resolution or graph construction, so there is no second, more permissive path into the graph. Relationships use a single canonical vocabulary (`located_at`, `owns`, `uses`, `member_of`, `associated_with`, `contacted`, `met`, `involved_in`, `transacted_with`); communications and transactions map onto it rather than introducing edge types of their own.
 
-`KnowledgeGraphService` converts resolved entities into provenance-carrying nodes and communication, transaction, or explicit relationship records into typed observed edges. Edges retain their source record, timestamp, confidence, and evidence reference. The graph schemas are intentionally simple lists of nodes and edges so later analytics can be added without changing the evidence contract. Graphs are currently held in process memory for this prototype; persistence and graph analytics are out of scope for Phase 3.
+## Provenance and assertion semantics
 
-## Phase 4 NLP extraction
+`ProvenanceRecord` is the single provenance atom, carrying `case_id`, `source_record_id`, `document_id`, `content_hash`, `source_type`, `extraction_run_id`, `character_start`/`character_end`, `snippet`, and `observed_at`. Spans extracted from a report survive through resolution and graph construction to the evidence endpoint. A span that is incomplete or unquotable is rejected rather than stored as misleading evidence.
 
-`NLPExtractionService` provides a reproducible, lightweight extractor for the controlled synthetic report format. It uses regular expressions and explicit relationship phrases to identify people, phone numbers, vehicles, locations, organizations, date/time values, and incident/event text. It emits normalized values, stable deterministic IDs, confidence values, character spans, source report IDs, and evidence snippets. Relationships are created only for explicit phrases such as “contacted ... using phone,” “drove vehicle,” “met,” and “associated with”; co-occurrence alone does not create an edge.
+Two orthogonal semantics are modelled. `assertion_type` records the status of a claim (`observed`, `inferred`, `unknown`); `provenance_type` records how the supporting evidence was located. Structured records are `observed`. NLP output is `inferred` even though its backing span is `observed`, because the interpretation is the machine's. Combining records keeps the weakest assertion, so nothing gains certainty by being merged.
 
-The extractor adapter converts supported entities and explicit relationships into the existing `IngestedRecord` representation. The `/api/nlp/process` endpoint then runs extraction, entity resolution, and graph construction in sequence, preserving the original report source reference throughout. This is a deterministic NLP demonstration, not a general-purpose language understanding system; unsupported wording may produce no extraction, and all outputs are evidence-bearing observations rather than conclusions about guilt or criminality.
+## Entity resolution
+
+`EntityResolutionService` applies deterministic structured keys after normalization: names and aliases for people, digits for phone numbers, registrations for vehicles, label/locality pairs for locations, normalized names for organizations, and type/summary for incidents. An exact key match consolidates source representations under one minted canonical ID while retaining every source ID and every piece of provenance. A strong-but-not-exact fuzzy similarity is never silently merged; it produces a `candidate_review` result with confidence and candidate IDs, and the record is listed in `unresolved_record_ids`. No criminality, guilt, or risk score is produced.
+
+## Knowledge graph
+
+`KnowledgeGraphService` converts resolved entities into provenance-carrying nodes that retain their `match_status`, `match_confidence` and `review_candidates`, so an uncertain identity stays distinguishable from a confident one. Edge identity is `(case_id, from, to, relationship_type)`: several records asserting the same relationship pool their evidence onto one edge instead of producing duplicate IDs, and evidence lookup returns every supporting record.
+
+Construction is total and explainable. An edge is only created when both endpoints resolve to nodes present in the graph; a relationship whose endpoint cannot be resolved appears in `rejected_edges` with a reason rather than becoming a dangling edge. Graphs are held in process memory for this prototype; persistence and graph analytics remain out of scope.
+
+## NLP extraction
+
+`NLPExtractionService` is a deterministic rule-based extractor for the controlled synthetic report format, not a language model. It is built to find less rather than to assert something the text does not support.
+
+Relationship attribution is sentence-scoped: the subject is the nearest person mention preceding the trigger phrase within the same sentence. If no person precedes the trigger in that sentence, the relationship is omitted rather than attributed to a person from elsewhere in the document. A standalone first or last name is treated as another mention of an already-extracted person, but only when it matches exactly one of them; an ambiguous short name is ignored. A negated statement does not become the relationship it denies, and the omission is reported in `warnings`.
+
+Extraction emits the canonical relationship vocabulary directly. Character spans, snippets, content hash and extraction run ID are preserved into provenance. Output that has no domain representation, such as a `DATE_TIME` used to time another assertion, is reported in `rejected_records` rather than silently dropped.
+
+Known limitations: hedged or hypothetical wording ("it is possible that ...") is still extracted, though only ever as an `inferred` assertion with sub-1.0 confidence; sentence splitting is punctuation-based; and unsupported wording simply produces no extraction.
 
 ## Prerequisites
 
@@ -85,7 +103,7 @@ npm run build
 
 ## Current MVP status
 
-**Phase 4 complete:** deterministic synthetic-report NLP extraction, explicit relationship extraction, source spans and evidence snippets, integration with ingestion/entity resolution/graph construction, NLP APIs, synthetic report fixtures, and automated tests. Phase 1–3 functionality remains in place.
+**Stage A complete:** case scoping enforced end to end, canonical identity minting, a single validation boundary shared by structured and NLP records, structured provenance with preserved spans, explicit observed/inferred/unknown semantics, sentence-scoped relationship attribution, graph referential integrity, and a shared graph store so `POST /api/nlp/process` produces a graph retrievable through the graph API. Phases 1–4 functionality remains in place.
 
 The following remain explicitly out of scope: graph visualization and analytics, anomaly detection, authentication, and the full investigation dashboard.
 

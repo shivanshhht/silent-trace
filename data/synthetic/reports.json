@@ -1,8 +1,3 @@
 [
-  {
-    "report_id": "rpt_demo-001",
-    "source_record_id": "src_report-demo-001",
-    "observed_at": "2026-01-10T08:00:00Z",
-    "text": "On 2026-01-09 18:30, Avery Rowan contacted Blair Keene using phone +1 (555) 010-2040. Avery drove vehicle ST-2040 at Demo Market and met Blair Keene. Avery was associated with Northstar Demo Cooperative in Example City. The incident, fictional package handoff, was recorded."
-  }
+  {"case_id":"case_demo-001","report_id":"rpt_demo-001","source_record_id":"src_report-demo-001","observed_at":"2026-01-10T08:00:00Z","text":"On 2026-01-09 18:30, Avery Rowan contacted Blair Keene using phone +1 (555) 010-2040. Avery drove vehicle ST-2040 at Demo Market and met Blair Keene. Avery was associated with Northstar Demo Cooperative in Example City. The incident, fictional package handoff, was recorded."}
 ]
