@@ -37,3 +37,6 @@ data/processed/*
 *.db
 *.db-journal
 *.sqlite3
+
+.vercel
+.env*
