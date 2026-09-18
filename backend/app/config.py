@@ -17,15 +17,17 @@ REPO_ROOT = BACKEND_ROOT.parent
 SYNTHETIC_DATA_DIR = REPO_ROOT / "data" / "synthetic"
 
 DEMO_DATASET_PATH = SYNTHETIC_DATA_DIR / "demo_dataset.json"
-DEMO_REPORTS_PATH = SYNTHETIC_DATA_DIR / "reports.json"
+DEMO_REPORTS_PATH = SYNTHETIC_DATA_DIR / "reports.json" 
+
+DEFAULT_SQLITE_PATH = BACKEND_ROOT / "silent_trace.db"
 
 DATABASE_URL_ENV = "SILENT_TRACE_DATABASE_URL"
-DEFAULT_SQLITE_PATH = BACKEND_ROOT / "silent_trace.db"
+POSTGRES_URL_ENV = "SILENT_TRACE_POSTGRES_URL"
 
 
 def database_url() -> str:
     """Resolve the active database URL, defaulting to the local SQLite file."""
-    configured = os.environ.get(DATABASE_URL_ENV)
+    configured = os.environ.get(POSTGRES_URL_ENV) or os.environ.get(DATABASE_URL_ENV)
     if configured:
         return configured
     return f"sqlite:///{DEFAULT_SQLITE_PATH.as_posix()}"

@@ -224,7 +224,7 @@ export function NetworkGraph({
       }
     })
 
-    const full = reused < cy.nodes().length
+    const full = true
     if (full) {
       const layout = cy.layout({
         ...(LAYOUTS[layoutName]?.options ?? LAYOUTS.fcose.options),
